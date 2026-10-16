@@ -27,6 +27,7 @@ task changes in SQLite.
 
 - Import CSV, `.xlsx`, and `.xls` order files.
 - Restrict uploaded files to a maximum of 10 MB.
+- Enforce a 100 MB SQLite database limit, including WAL/journal sidecars.
 - Normalize common column-name variants, including `Order Value (INR)`.
 - Validate required values, IDs, dates, payment types, and order amounts.
 - Detect five exception types: Unconfirmed Order, Dispatch Delay, Shipment
@@ -74,6 +75,14 @@ The database file, `order_followup.db`, is created in the project root when
 the application starts. It is ignored by Git because it contains local
 runtime data. The test suite redirects database access to temporary databases
 and should not modify the application's database.
+
+The sidebar displays total SQLite database usage against the 100 MB limit.
+The size includes the database, WAL, shared-memory, and rollback-journal files
+when present. A warning appears at 80 MB. Imports are estimated before writes,
+constrained by SQLite's page limit, and checked again inside the import
+transaction; an import that would exceed the limit is rolled back. Existing
+data is never removed to make room. The 10 MB upload limit is separate and
+measures the selected CSV/Excel file, not database growth.
 
 ## Requirements
 
@@ -346,6 +355,8 @@ Thresholds and default priorities are defined in `config.py`.
 | `UNCONFIRMED_STATUSES` | `processing` | Statuses evaluated by the unconfirmed rule. |
 | `DISPATCH_LIMIT_HOURS` | 24 | Default `placed`-order dispatch limit. |
 | `HIGH_VALUE_THRESHOLD` | 5000 | Default order value in INR above which applicable exceptions are High priority; the saved dashboard setting overrides it. |
+| `MAX_UPLOAD_SIZE_MB` | 10 | Maximum size of an individual uploaded file. |
+| `MAX_DATABASE_SIZE_MB` | 100 | Maximum combined on-disk SQLite database and sidecar size. |
 | `DEFAULT_PRIORITY` | Per exception type | Priority assigned to each exception type. |
 
 The dashboard's **Dispatch delay threshold (hours)** control overrides the
@@ -403,6 +414,8 @@ cover:
 - Excluding other statuses from the unconfirmed rule.
 - Data Correction behavior for missing or invalid `processing` order dates.
 - Rule-engine/task idempotency and repeat-upload duplicate handling.
+- Database size calculation including WAL/journal sidecars, capacity rejection,
+  and transactional rollback for oversized imports.
 - Task assignment, reassignment, status/deadline updates, and audit events.
 - Report categories, empty report behavior, and a sample-data workflow.
 

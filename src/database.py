@@ -4,9 +4,74 @@ import math
 import sqlite3
 from pathlib import Path
 
-from config import HIGH_VALUE_THRESHOLD
+from config import HIGH_VALUE_THRESHOLD, MAX_DATABASE_SIZE_BYTES
 
 DB_PATH = Path(__file__).resolve().parent.parent / "order_followup.db"
+
+
+class DatabaseSizeLimitError(ValueError):
+    """Raised when a database write would exceed the configured size limit."""
+
+
+def database_size_bytes():
+    """Return SQLite database and on-disk sidecar sizes, including WAL/journal."""
+    paths = (
+        DB_PATH,
+        Path(f"{DB_PATH}-wal"),
+        Path(f"{DB_PATH}-shm"),
+        Path(f"{DB_PATH}-journal"),
+    )
+    return sum(path.stat().st_size for path in paths if path.exists())
+
+
+def ensure_database_capacity(
+    connection,
+    estimated_growth_bytes=0,
+    limit_bytes=MAX_DATABASE_SIZE_BYTES,
+):
+    """Set a connection page limit and reject writes with insufficient space."""
+    current_size = database_size_bytes()
+    if current_size + estimated_growth_bytes > limit_bytes:
+        raise DatabaseSizeLimitError
+
+    page_size = connection.execute("PRAGMA page_size").fetchone()[0]
+    page_count = connection.execute("PRAGMA page_count").fetchone()[0]
+    sidecar_size = current_size - (
+        DB_PATH.stat().st_size if DB_PATH.exists() else 0
+    )
+    max_pages = (limit_bytes - sidecar_size) // page_size
+    if page_count > max_pages:
+        raise DatabaseSizeLimitError
+
+    connection.execute(f"PRAGMA max_page_count = {max_pages}")
+
+
+def verify_database_capacity(
+    connection,
+    limit_bytes=MAX_DATABASE_SIZE_BYTES,
+):
+    """Reject the active transaction if its on-disk/logical size is too large."""
+    database_path_size = DB_PATH.stat().st_size if DB_PATH.exists() else 0
+    sidecar_paths = (
+        Path(f"{DB_PATH}-wal"),
+        Path(f"{DB_PATH}-shm"),
+        Path(f"{DB_PATH}-journal"),
+    )
+    sidecar_size = sum(
+        path.stat().st_size for path in sidecar_paths
+        if path.exists()
+    )
+    logical_database_size = (
+        connection.execute("PRAGMA page_count").fetchone()[0]
+        * connection.execute("PRAGMA page_size").fetchone()[0]
+    )
+    projected_size = max(
+        database_path_size,
+        logical_database_size,
+    ) + sidecar_size
+
+    if max(database_size_bytes(), projected_size) > limit_bytes:
+        raise DatabaseSizeLimitError
 
 
 @contextmanager

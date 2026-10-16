@@ -9,10 +9,14 @@ import streamlit as st
 from config import (
     DISPATCH_LIMIT_HOURS,
     HIGH_VALUE_THRESHOLD,
+    MAX_DATABASE_SIZE_BYTES,
+    MAX_DATABASE_SIZE_MB,
     MAX_UPLOAD_SIZE_MB,
 )
 from src.database import (
+    DatabaseSizeLimitError,
     clear_database,
+    database_size_bytes,
     get_high_value_threshold,
     get_connection,
     initialize_database,
@@ -94,8 +98,23 @@ if st.sidebar.button("Import Orders", type="primary"):
             result = import_orders(uploaded_file)
             st.session_state["import_result"] = result
             st.sidebar.success(f"Imported {result['imported']} orders.")
+        except DatabaseSizeLimitError as exc:
+            st.session_state.pop("import_result", None)
+            st.sidebar.error(str(exc))
         except (OSError, ValueError, ImportError, sqlite3.Error) as exc:
             st.sidebar.error(f"Import failed: {exc}")
+
+database_usage_bytes = database_size_bytes()
+st.sidebar.caption(
+    f"Database usage: "
+    f"{database_usage_bytes / (1024 * 1024):.1f} MB / "
+    f"{MAX_DATABASE_SIZE_MB} MB"
+)
+if database_usage_bytes >= MAX_DATABASE_SIZE_BYTES * 80 // 100:
+    st.sidebar.warning(
+        "Database usage has reached 80 MB. Consider clearing old data "
+        "before importing more orders."
+    )
 
 if "import_result" in st.session_state:
     result = st.session_state["import_result"]

@@ -1,10 +1,16 @@
 
+import sqlite3
 import zipfile
 
 import pandas as pd
 
-from config import MAX_UPLOAD_SIZE_MB
-from src.database import get_connection
+from config import MAX_DATABASE_SIZE_BYTES, MAX_UPLOAD_SIZE_MB
+from src.database import (
+    DatabaseSizeLimitError,
+    ensure_database_capacity,
+    get_connection,
+    verify_database_capacity,
+)
 from src.validator import validate_dataframe
 
 
@@ -18,6 +24,19 @@ def _uploaded_file_size(uploaded_file):
     size = uploaded_file.tell()
     uploaded_file.seek(current_position)
     return size
+
+
+def _estimate_database_growth(records):
+    # Row payload plus SQLite page/index/record overhead; final sizing is also
+    # checked against SQLite's page count and on-disk files in the transaction.
+    return sum(
+        8192 + sum(
+            len(str(value).encode("utf-8"))
+            for value in record.values()
+            if value is not None
+        )
+        for record in records
+    )
 
 
 def import_orders(uploaded_file):
@@ -71,42 +90,76 @@ def import_orders(uploaded_file):
     records, errors = validate_dataframe(df)
     imported = 0
 
-    with get_connection() as connection:
-        for record in records:
-            existing = connection.execute(
-                "SELECT 1 FROM orders WHERE order_id = ?",
-                (record["order_id"],),
-            ).fetchone()
+    try:
+        with get_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            new_records = []
+            for record in records:
+                existing = connection.execute(
+                    "SELECT 1 FROM orders WHERE order_id = ?",
+                    (record["order_id"],),
+                ).fetchone()
 
-            if existing:
-                errors.append({
-                    "row": None,
-                    "order_id": record["order_id"],
-                    "errors": ["Order ID already exists in database"],
-                })
-                continue
+                if existing:
+                    errors.append({
+                        "row": None,
+                        "order_id": record["order_id"],
+                        "errors": ["Order ID already exists in database"],
+                    })
+                    continue
+                new_records.append(record)
 
-            connection.execute("""
-                INSERT INTO orders (
-                    order_id, order_date, customer_name,
-                    phone_number, order_value, payment_type,
-                    order_status, dispatch_date,
-                    expected_delivery_date, assigned_employee
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                record["order_id"],
-                record["order_date"],
-                record["customer_name"],
-                record["phone_number"],
-                record["order_value"],
-                record["payment_type"],
-                record["order_status"],
-                record["dispatch_date"],
-                record["expected_delivery_date"],
-                record["assigned_employee"],
-            ))
+            if new_records:
+                ensure_database_capacity(
+                    connection,
+                    estimated_growth_bytes=_estimate_database_growth(
+                        new_records
+                    ),
+                    limit_bytes=MAX_DATABASE_SIZE_BYTES,
+                )
 
-            imported += 1
+            for record in new_records:
+                connection.execute("""
+                    INSERT INTO orders (
+                        order_id, order_date, customer_name,
+                        phone_number, order_value, payment_type,
+                        order_status, dispatch_date,
+                        expected_delivery_date, assigned_employee
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    record["order_id"],
+                    record["order_date"],
+                    record["customer_name"],
+                    record["phone_number"],
+                    record["order_value"],
+                    record["payment_type"],
+                    record["order_status"],
+                    record["dispatch_date"],
+                    record["expected_delivery_date"],
+                    record["assigned_employee"],
+                ))
+
+                imported += 1
+
+            if new_records:
+                verify_database_capacity(
+                    connection,
+                    limit_bytes=MAX_DATABASE_SIZE_BYTES,
+                )
+    except DatabaseSizeLimitError:
+        raise DatabaseSizeLimitError(
+            "Could not upload data: the database size limit of 100 MB "
+            "would be exceeded. Clear existing data or upload a smaller "
+            "dataset."
+        ) from None
+    except sqlite3.OperationalError as exc:
+        if "full" in str(exc).lower():
+            raise DatabaseSizeLimitError(
+                "Could not upload data: the database size limit of 100 MB "
+                "would be exceeded. Clear existing data or upload a smaller "
+                "dataset."
+            ) from exc
+        raise
 
     return {
         "imported": imported,
