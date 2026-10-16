@@ -157,6 +157,16 @@ Stop the server with `Ctrl+C`.
 Importing orders does not automatically run the rules. Run exception detection
 after importing new data to create corresponding exceptions and tasks.
 
+### Clear the database for a fresh upload
+
+Use **Database Management** in the sidebar and click **Clear Database for
+Fresh Upload**. The app displays a warning and requires **Confirm Clear
+Database** before deleting imported orders, exceptions, tasks, and audit
+history. Choose **Cancel** to leave all records unchanged. Clearing is
+permanent, does not delete local upload files, and does not drop or recreate
+database tables. After a successful clear, you can import a fresh CSV or Excel
+file normally.
+
 ## Order file format and validation
 
 The file must contain the following logical columns. Names are normalized:

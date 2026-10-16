@@ -92,6 +92,13 @@ def initialize_database():
         """)
 
 
+def clear_database():
+    """Delete all application records in one foreign-key-safe transaction."""
+    with get_connection() as connection:
+        for table in ("audit_logs", "tasks", "exceptions", "orders"):
+            connection.execute(f"DELETE FROM {table}")
+
+
 if __name__ == "__main__":
     initialize_database()
     print(f"Database initialized: {DB_PATH}")

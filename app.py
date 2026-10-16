@@ -7,7 +7,11 @@ import pandas as pd
 import streamlit as st
 
 from config import DISPATCH_LIMIT_HOURS
-from src.database import get_connection, initialize_database
+from src.database import (
+    clear_database,
+    get_connection,
+    initialize_database,
+)
 from src.importer import import_orders
 from src.report_service import build_daily_exception_report
 from src.rule_engine import run_rule_engine
@@ -24,6 +28,46 @@ initialize_database()
 
 st.title("D2C Order Follow-up")
 st.caption("Monitor exceptions, assign follow-ups, and track resolution.")
+
+if st.session_state.pop("database_cleared_successfully", False):
+    st.sidebar.success("Database cleared. You can upload fresh orders now.")
+
+st.sidebar.header("Database Management")
+st.sidebar.caption(
+    "Permanently deletes imported orders, exceptions, tasks, and audit history. "
+    "Uploaded files on your computer are not affected."
+)
+if st.sidebar.button("Clear Database for Fresh Upload"):
+    st.session_state["confirm_database_clear"] = True
+
+if st.session_state.get("confirm_database_clear", False):
+    st.sidebar.warning(
+        "This permanently deletes all imported orders, exceptions, tasks, "
+        "and audit history. This action cannot be undone."
+    )
+    confirm_col, cancel_col = st.sidebar.columns(2)
+    if confirm_col.button("Confirm Clear Database"):
+        try:
+            clear_database()
+        except sqlite3.Error as exc:
+            st.sidebar.error(f"Could not clear the database: {exc}")
+        else:
+            for key in (
+                "import_result",
+                "order_count",
+                "orders",
+                "exceptions",
+                "tasks",
+                "dashboard_results",
+                "report",
+                "uploaded_data_result",
+            ):
+                st.session_state.pop(key, None)
+            st.session_state.pop("confirm_database_clear", None)
+            st.session_state["database_cleared_successfully"] = True
+            st.rerun()
+    if cancel_col.button("Cancel"):
+        st.session_state.pop("confirm_database_clear", None)
 
 st.sidebar.header("Order Import")
 uploaded_file = st.sidebar.file_uploader(
