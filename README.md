@@ -10,6 +10,7 @@ task changes in SQLite.
 - [Features](#features)
 - [Project structure](#project-structure)
 - [Requirements](#requirements)
+- [Clone the repository](#clone-the-repository)
 - [Install and run](#install-and-run)
 - [How to use the application](#how-to-use-the-application)
 - [Order file format and validation](#order-file-format-and-validation)
@@ -76,6 +77,7 @@ and should not modify the application's database.
 ## Requirements
 
 - Python 3.11 or newer is recommended.
+- Git.
 - `pip`.
 - Internet access when installing packages.
 - Windows, macOS, or Linux.
@@ -90,9 +92,24 @@ The dependencies in `requirements.txt` are:
 | xlrd | Legacy `.xls` spreadsheet support |
 | pytest | Automated tests |
 
+## Clone the repository
+
+Open a terminal and clone the GitHub repository:
+
+```shell
+git clone https://github.com/muhd-anwaf/d2c-order-followup-automation.git
+cd d2c-order-followup-automation
+```
+
+Make sure you are in the cloned project directory containing `app.py` and
+`requirements.txt` before continuing. If Git is not installed, install it
+first, then reopen the terminal.
+
 ## Install and run
 
-Run these commands from the project root (the directory containing `app.py`).
+The following commands create an isolated Python environment, install the
+project dependencies, and start the Streamlit app. Run them from the project
+root after cloning (the directory containing `app.py`).
 
 ### Windows PowerShell
 
