@@ -37,10 +37,10 @@ def test_sample_orders_complete_import_detection_task_and_report_workflow():
     default_threshold_count = run_rule_engine(
         now=now, dispatch_limit_hours=24
     )
-    assert default_threshold_count == 75
+    assert default_threshold_count == 65
     assert run_rule_engine(now=now, dispatch_limit_hours=24) == 0
     assert run_rule_engine(now=now, dispatch_limit_hours=12) == 5
-    assert create_tasks_for_exceptions() == 80
+    assert create_tasks_for_exceptions() == 70
     assert create_tasks_for_exceptions() == 0
 
     with get_connection() as connection:

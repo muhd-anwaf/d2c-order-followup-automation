@@ -27,8 +27,8 @@ task changes in SQLite.
 - Import CSV, `.xlsx`, and `.xls` order files.
 - Normalize common column-name variants, including `Order Value (INR)`.
 - Validate required values, IDs, dates, payment types, and order amounts.
-- Detect six exception types: Unconfirmed Order, Dispatch Delay, Shipment
-  Delay, Failed Delivery, High-Value Order, and Data Correction.
+- Detect five exception types: Unconfirmed Order, Dispatch Delay, Shipment
+  Delay, Failed Delivery, and Data Correction.
 - Create one task per exception and use the order's assigned employee when
   creating a task.
 - Reassign employees, set or clear task deadlines, and update task status.
@@ -165,12 +165,12 @@ for example, `Order Value (INR)` and `Order Value` both map to `order_value`.
 | Logical field | Required value? | Example |
 |---|---:|---|
 | `order_id` | Yes | `ORD1001` |
-| `order_date` | Yes, except an unconfirmed row may be imported for correction | `2026-10-16 08:00:00` |
+| `order_date` | Yes, except a `processing` or `placed` row may be imported for correction | `2026-10-16 08:00:00` |
 | `customer_name` | Yes | `Asha Nair` |
 | `phone_number` | Yes | `9876543210` |
 | `order_value` | Yes | `2499.00` |
 | `payment_type` | Yes | `Prepaid` or `COD` |
-| `order_status` | Yes | `Processing` |
+| `order_status` | Yes | One of `processing`, `placed`, `cancelled`, `dispatched`, `delivered`, or `failed_delivery` |
 | `dispatch_date` | No | `2026-10-16 12:00:00` |
 | `expected_delivery_date` | No | `2026-10-19` |
 | `assigned_employee` | No | `Anu` |
@@ -194,10 +194,12 @@ Duplicate IDs inside one upload are compared without regard to capitalization.
 An order ID already stored in the database is rejected rather than updated;
 the current import workflow is insert-only.
 
-For `Processing`, `unconfirmed`, or `pending confirmation` orders, a missing
-or invalid `order_date` is stored as missing and shown in the import error
-table so the rule engine can create a Data Correction exception and follow-up
-task. Other malformed nonblank dates and records with other missing mandatory
+Statuses are trimmed and lowercased on import, so capitalization and
+surrounding whitespace do not affect matching. Values outside the six statuses
+listed above are rejected. For `processing` and `placed` orders, a missing or
+invalid `order_date` is stored as missing and shown in the import error table
+so the rule engine can create a Data Correction exception and follow-up task.
+Other malformed nonblank dates and records with other missing mandatory
 fields are rejected from import. Blank optional dates are accepted; if a rule
 needs one of them, the rule engine creates a Data Correction exception rather
 than evaluating that business rule with incomplete data.
@@ -209,27 +211,28 @@ priority, recommended action, and a stable key used to avoid duplicates.
 
 | Exception type | Trigger | Default priority |
 |---|---|---|
-| **Unconfirmed Order** | Status is `Processing`, `unconfirmed`, or `pending confirmation`, and elapsed time since `order_date` is strictly greater than 2 hours. | Medium |
-| **Dispatch Delay** | Status is `confirmed`, there is no dispatch date, and elapsed time since `order_date` exceeds the dispatch threshold. | High |
-| **Shipment Delay** | A dispatch date exists, expected delivery date has passed, and status is not delivered or terminal. | High |
-| **Failed Delivery** | Status indicates a failed delivery attempt. | High |
-| **High-Value Order** | Value is greater than ₹5,000 and expected delivery date has passed while the order is undelivered. | High |
-| **Data Correction** | A date required to evaluate a relevant rule is missing or invalid. | Medium |
+| **Unconfirmed Order** | Status is `processing` and elapsed time since `order_date` is strictly greater than 2 hours. | Medium |
+| **Dispatch Delay** | Status is `placed`, there is no dispatch date, and elapsed time since `order_date` is strictly greater than the configured dispatch threshold (24 hours by default). | Medium |
+| **Shipment Delay** | Status is `dispatched` and the expected delivery date is in the past. | Medium |
+| **Failed Delivery** | Status is `failed_delivery`. | High |
+| **Data Correction** | A date required to evaluate a relevant rule is missing or invalid, or an unsupported status is encountered in stored data. | Medium |
 
-The unconfirmed comparison is **greater than**, not greater than or equal to:
-1 hour 59 minutes and exactly 2 hours do not trigger it; 2 hours and 1 second
-does. Status comparison ignores capitalization and surrounding whitespace.
-Once the order status moves out of the unconfirmed statuses, the
-Unconfirmed Order rule no longer applies.
+Any applicable exception for an order worth more than ₹5,000 is raised to
+High priority. High value does not create a separate exception.
+
+Elapsed-time rules use a strict greater-than comparison. For `processing`,
+1 hour 59 minutes and exactly 2 hours do not trigger an exception; 2 hours and
+1 second does. For `placed`, exactly 24 hours does not trigger the default
+dispatch exception. A dispatched order becomes overdue only after its expected
+delivery timestamp; a date-only expected date is overdue starting the next
+calendar day. Status comparison ignores capitalization and surrounding
+whitespace. Once an order moves out of `processing`, the Unconfirmed Order
+rule no longer applies.
 
 The order schema has no separate confirmation timestamp. Consequently,
-`order_date` is used as the elapsed-time reference for unconfirmed orders; add
-a real confirmation timestamp before using this as a production SLA.
-
-Delivered, cancelled, canceled, returned, refunded, RTO, and returned-to-origin
-statuses are not considered overdue undelivered orders. Failed delivery
-statuses include `failed delivery`, `delivery failed`, `failed_attempt`, and
-`delivery failed - rto`.
+`order_date` is used as the elapsed-time reference for the `processing` and
+`placed` rules; add a real confirmation timestamp before using this as a
+production SLA. Cancelled and delivered orders do not trigger delay rules.
 
 ## Tasks, audit, dashboard, and reports
 
@@ -300,10 +303,11 @@ Thresholds and default priorities are defined in `config.py`.
 
 | Setting | Default | Description |
 |---|---:|---|
-| `UNCONFIRMED_LIMIT_HOURS` | 2 | Age after which a Processing/unconfirmed order is flagged. |
-| `UNCONFIRMED_STATUSES` | `processing`, `unconfirmed`, `pending confirmation` | Statuses evaluated by the unconfirmed rule. |
-| `DISPATCH_LIMIT_HOURS` | 24 | Default confirmed-order dispatch limit. |
-| `HIGH_VALUE_THRESHOLD` | 5000 | High-value rule amount in INR; the rule requires an amount greater than this value. |
+| `UNCONFIRMED_LIMIT_HOURS` | 2 | Age after which a `processing` order is flagged. |
+| `ORDER_STATUSES` | Six fixed statuses | Accepted order status values; inputs are normalized to lowercase. |
+| `UNCONFIRMED_STATUSES` | `processing` | Statuses evaluated by the unconfirmed rule. |
+| `DISPATCH_LIMIT_HOURS` | 24 | Default `placed`-order dispatch limit. |
+| `HIGH_VALUE_THRESHOLD` | 5000 | Order value in INR above which applicable exceptions are High priority. |
 | `DEFAULT_PRIORITY` | Per exception type | Priority assigned to each exception type. |
 
 The dashboard's **Dispatch delay threshold (hours)** control overrides the
@@ -318,12 +322,12 @@ unconfirmed limit is configured in `config.py`.
 - 100 valid, unique orders.
 - 5 duplicate-ID rows to exercise duplicate validation.
 - 5 incomplete rows to exercise mandatory-field validation.
-- Valid scenarios including delivered and confirmed orders, 15 `Processing`
-  orders, dispatch delays, overdue shipments, failed delivery attempts,
-  high-value orders, and missing expected-delivery dates.
+- Valid scenarios including delivered and `placed` orders, 15 `processing`
+  orders, dispatch delays, overdue dispatched orders, failed delivery
+  attempts, high-value orders, and missing expected-delivery dates.
 
 Five of the `Processing` orders are generated with order timestamps about four
-hours old. Five confirmed orders are generated about 18 hours old so the
+hours old. Five `placed` orders are generated about 18 hours old so the
 dispatch threshold can be demonstrated at 12 hours versus 24 hours. These
 timestamps are relative to the time the files were generated.
 
@@ -353,7 +357,7 @@ cover:
 - `Processing` at 1:59, exactly 2:00, and 2:00:01, plus older orders.
 - Status matching with capitalization and surrounding whitespace.
 - Excluding other statuses from the unconfirmed rule.
-- Data Correction behavior for missing or invalid unconfirmed order dates.
+- Data Correction behavior for missing or invalid `processing` order dates.
 - Rule-engine/task idempotency and repeat-upload duplicate handling.
 - Task assignment, reassignment, status/deadline updates, and audit events.
 - Report categories, empty report behavior, and a sample-data workflow.

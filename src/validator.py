@@ -3,7 +3,7 @@ import math
 
 import pandas as pd
 
-from config import UNCONFIRMED_STATUSES
+from config import ORDER_STATUSES, UNCONFIRMED_STATUSES
 
 REQUIRED_COLUMNS = [
     "order_id",
@@ -116,10 +116,16 @@ def validate_dataframe(df):
             else ""
         )
 
+        if normalized_status not in ORDER_STATUSES:
+            row_errors.append(
+                "Order status must be one of: "
+                + ", ".join(sorted(ORDER_STATUSES))
+            )
+
         for field in MANDATORY_FIELDS:
             if (
                 field == "order_date"
-                and normalized_status in UNCONFIRMED_STATUSES
+                and normalized_status in UNCONFIRMED_STATUSES | {"placed"}
             ):
                 continue
             value = record.get(field)
@@ -140,7 +146,7 @@ def validate_dataframe(df):
                 record[field] = None
                 if (
                     field == "order_date"
-                    and normalized_status in UNCONFIRMED_STATUSES
+                    and normalized_status in UNCONFIRMED_STATUSES | {"placed"}
                 ):
                     row_errors.append(
                         "Missing mandatory field: order_date"
@@ -205,7 +211,7 @@ def validate_dataframe(df):
                 "Invalid date: order_date",
             })
             if (
-                normalized_status in UNCONFIRMED_STATUSES
+                normalized_status in UNCONFIRMED_STATUSES | {"placed"}
                 and date_correction_only
             ):
                 valid_records.append(record)

@@ -19,7 +19,7 @@ def _insert_exception(order_id="TASK-001", employee="Employee A"):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             order_id, "2026-10-15 08:00:00", "Test Customer",
-            "9876543210", 2000, "cod", "confirmed", employee,
+            "9876543210", 2000, "cod", "placed", employee,
         ))
         connection.execute("""
             INSERT INTO exceptions (
@@ -96,7 +96,7 @@ def test_rule_detection_and_task_creation_are_persistent_and_idempotent():
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             "RULE-PERSIST", "2026-10-15 22:00:00", "Test Customer",
-            "9876543210", 2000, "cod", "confirmed", "Employee A",
+            "9876543210", 2000, "cod", "placed", "Employee A",
         ))
 
     now = datetime(2026, 10, 16, 15, 0, 0, tzinfo=timezone.utc)

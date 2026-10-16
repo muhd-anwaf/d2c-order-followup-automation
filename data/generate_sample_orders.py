@@ -78,7 +78,7 @@ def main():
         add_order(
             f"ORD-NORM-C-{index:03}",
             "normal",
-            "confirmed",
+            "placed",
             dispatch_offset=0,
             assigned="Ravi Kumar",
         )
@@ -94,14 +94,14 @@ def main():
         add_order(
             f"ORD-DISP-B-{index:03}",
             "borderline_dispatch",
-            "confirmed",
+            "placed",
             assigned="Meera Das",
         )
     for index in range(6, 16):
         add_order(
             f"ORD-DISP-{index:03}",
             "dispatch_delay",
-            "confirmed",
+            "placed",
             order_offset=-2,
             assigned="Meera Das",
         )
@@ -109,7 +109,7 @@ def main():
         add_order(
             f"ORD-SHIP-{index:03}",
             "overdue_shipment",
-            "in transit",
+            "dispatched",
             order_offset=-4,
             dispatch_offset=-3,
             delivery_offset=-1,
@@ -119,7 +119,7 @@ def main():
         add_order(
             f"ORD-FAIL-{index:03}",
             "failed_delivery",
-            "failed delivery",
+            "failed_delivery",
             order_offset=-2,
             dispatch_offset=-1,
             delivery_offset=2,
@@ -129,7 +129,7 @@ def main():
         add_order(
             f"ORD-HIGH-{index:03}",
             "high_value",
-            "in transit",
+            "dispatched",
             order_offset=-4,
             dispatch_offset=-3,
             delivery_offset=-1,
@@ -156,7 +156,7 @@ def main():
         "Phone Number",
         "Order Value (INR)",
         "Payment Type",
-        "Order Date",
+        "Order Status",
     )
     for index, missing_field in enumerate(missing_fields, 1):
         incomplete = dict(rows[20 + index])

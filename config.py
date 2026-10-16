@@ -1,19 +1,22 @@
 """Application configuration."""
 
 UNCONFIRMED_LIMIT_HOURS = 2
-UNCONFIRMED_STATUSES = {
-    "unconfirmed",
-    "pending confirmation",
+UNCONFIRMED_STATUSES = {"processing"}
+ORDER_STATUSES = {
     "processing",
+    "placed",
+    "cancelled",
+    "dispatched",
+    "delivered",
+    "failed_delivery",
 }
 DISPATCH_LIMIT_HOURS = 24
 HIGH_VALUE_THRESHOLD = 5000
 
 DEFAULT_PRIORITY = {
     "Unconfirmed Order": "Medium",
-    "Dispatch Delay": "High",
-    "Shipment Delay": "High",
+    "Dispatch Delay": "Medium",
+    "Shipment Delay": "Medium",
     "Failed Delivery": "High",
-    "High-Value Order": "High",
     "Data Correction": "Medium",
 }

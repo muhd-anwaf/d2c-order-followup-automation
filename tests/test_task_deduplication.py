@@ -15,7 +15,7 @@ def test_task_creation_is_idempotent():
             ) VALUES (
                 'TASKTEST01', '2026-10-16 08:00:00',
                 'Test Customer', '9876543210', 2000,
-                'cod', 'unconfirmed'
+                'cod', 'processing'
             )
         """)
 

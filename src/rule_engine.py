@@ -9,25 +9,12 @@ from config import (
     HIGH_VALUE_THRESHOLD,
     DEFAULT_PRIORITY,
     UNCONFIRMED_STATUSES,
+    ORDER_STATUSES,
 )
 
 
 DELIVERED_STATUSES = {"delivered"}
-TERMINAL_STATUSES = {
-    "cancelled",
-    "canceled",
-    "returned",
-    "refunded",
-    "rto",
-    "returned to origin",
-}
-CONFIRMED_STATUSES = {"confirmed"}
-FAILED_STATUSES = {
-    "failed delivery",
-    "delivery failed",
-    "failed_attempt",
-    "delivery failed - rto",
-}
+TERMINAL_STATUSES = {"cancelled"}
 
 
 def parse_date(value):
@@ -59,7 +46,7 @@ def is_date_past(value, now):
     if date_value.time() == datetime.min.time():
         return date_value.date() < now.date()
 
-    return date_value <= now
+    return date_value < now
 
 
 def evaluate_order(
@@ -82,6 +69,11 @@ def evaluate_order(
     dispatch_date = parse_date(order["dispatch_date"])
     expected_date = parse_date(order["expected_delivery_date"])
 
+    try:
+        order_value = float(order["order_value"])
+    except (ValueError, TypeError):
+        order_value = None
+
     def add_exception(exception_type, reason, action):
         existing = next(
             (
@@ -103,7 +95,12 @@ def evaluate_order(
                 "order_id": order_id,
                 "exception_type": exception_type,
                 "reason": reason,
-                "priority": DEFAULT_PRIORITY[exception_type],
+                "priority": (
+                    "High"
+                    if order_value is not None
+                    and order_value > HIGH_VALUE_THRESHOLD
+                    else DEFAULT_PRIORITY[exception_type]
+                ),
                 "recommended_action": action,
             }
         )
@@ -127,25 +124,25 @@ def evaluate_order(
                 "Contact the customer and confirm the order.",
             )
 
-    # Rule 2: Confirmed but not dispatched
-    if status in CONFIRMED_STATUSES and dispatch_date is None:
+    # Rule 2: Placed but not dispatched
+    if status == "placed" and dispatch_date is None:
         if order_date is None:
             add_exception(
                 "Data Correction",
-                "Order date is missing or invalid; dispatch delay "
+                "Order date is missing or invalid; placed-order delay "
                 "cannot be calculated.",
                 "Correct the order date and rerun the rule engine.",
             )
         elif now - order_date > timedelta(hours=dispatch_limit_hours):
             add_exception(
                 "Dispatch Delay",
-                f"Confirmed order has not been dispatched within "
+                f"Placed order has not been dispatched within "
                 f"{dispatch_limit_hours} hours.",
                 "Contact the warehouse and arrange dispatch.",
             )
 
     # Rule 3: Dispatched but overdue
-    if dispatch_date is not None and is_undelivered(status):
+    if status == "dispatched":
         if expected_date is None:
             add_exception(
                 "Data Correction",
@@ -161,37 +158,20 @@ def evaluate_order(
             )
 
     # Rule 4: Failed delivery attempt
-    if status in FAILED_STATUSES:
+    if status == "failed_delivery":
         add_exception(
             "Failed Delivery",
             "The shipment has a failed delivery attempt.",
             "Contact the customer and arrange another delivery attempt.",
         )
 
-    # Rule 5: High-value order overdue
-    try:
-        order_value = float(order["order_value"])
-    except (ValueError, TypeError):
-        order_value = None
-
-    if (
-        order_value is not None
-        and order_value > HIGH_VALUE_THRESHOLD
-        and is_undelivered(status)
-    ):
-        if expected_date is None:
-            add_exception(
-                "Data Correction",
-                "High-value order has no valid expected delivery date.",
-                "Correct the expected delivery date.",
-            )
-        elif is_date_past(order["expected_delivery_date"], now):
-            add_exception(
-                "High-Value Order",
-                f"Order value exceeds ₹{HIGH_VALUE_THRESHOLD} and "
-                "the expected delivery date has passed.",
-                "Escalate to the manager and contact the courier.",
-            )
+    if status not in ORDER_STATUSES:
+        add_exception(
+            "Data Correction",
+            f"Order status '{status}' is not a supported order status.",
+            "Correct the order status to a supported value and rerun "
+            "the rule engine.",
+        )
 
     return exceptions
 
