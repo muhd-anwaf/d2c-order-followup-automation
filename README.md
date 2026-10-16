@@ -5,6 +5,8 @@ imports order files, validates their contents, detects orders needing
 attention, creates follow-up tasks, tracks ownership and status, and records
 task changes in SQLite.
 
+**Live app:** [D2C Order Follow-up Automation](https://d2c-order-followup-automation-cdfpckgnyxp6edzgnsf5a3.streamlit.app/)
+
 ## Contents
 
 - [Features](#features)
