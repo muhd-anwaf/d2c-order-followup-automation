@@ -27,11 +27,11 @@ def test_sample_orders_complete_import_detection_task_and_report_workflow():
     import_result = import_orders(upload)
 
     assert import_result["imported"] == 100
-    assert len(import_result["errors"]) == 10
+    assert len(import_result["errors"]) == 16
     repeated_upload = NamedBytesIO(sample.read_bytes(), sample.name)
     repeated_import = import_orders(repeated_upload)
     assert repeated_import["imported"] == 0
-    assert len(repeated_import["errors"]) == 110
+    assert len(repeated_import["errors"]) == 116
 
     now = datetime.now(timezone.utc)
     default_threshold_count = run_rule_engine(

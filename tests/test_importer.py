@@ -107,6 +107,60 @@ def test_fixed_order_status_enum_is_normalized_and_enforced():
     assert "Order status must be one of" in errors[0]["errors"][0]
 
 
+def test_dispatched_order_requires_expected_delivery_date():
+    df = pd.DataFrame([{
+        "Order ID": "ORD-DISPATCHED-NO-ETA",
+        "Order Date": "2026-10-16 08:00:00",
+        "Customer Name": "Customer",
+        "Phone Number": "9876543210",
+        "Order Value": 1000,
+        "Payment Type": "COD",
+        "Order Status": " dispatched ",
+        "Dispatch Date": "2026-10-16 09:00:00",
+        "Expected Delivery Date": None,
+        "Assigned Employee": "Employee A",
+    }])
+
+    records, errors = validate_dataframe(df)
+
+    assert records == []
+    assert len(errors) == 1
+    assert "Missing mandatory field: expected_delivery_date" in errors[0][
+        "errors"
+    ]
+
+
+def test_import_rejects_dispatched_order_without_expected_delivery_date():
+    df = pd.DataFrame([{
+        "Order ID": "ORD-DISPATCHED-NO-ETA",
+        "Order Date": "2026-10-16 08:00:00",
+        "Customer Name": "Customer",
+        "Phone Number": "9876543210",
+        "Order Value": 1000,
+        "Payment Type": "COD",
+        "Order Status": "dispatched",
+        "Dispatch Date": "2026-10-16 09:00:00",
+        "Expected Delivery Date": "",
+        "Assigned Employee": "Employee A",
+    }])
+    upload = NamedBytesIO(
+        df.to_csv(index=False).encode("utf-8"),
+        "dispatched_missing_eta.csv",
+    )
+
+    result = import_orders(upload)
+
+    assert result["imported"] == 0
+    assert len(result["errors"]) == 1
+    assert "Missing mandatory field: expected_delivery_date" in result[
+        "errors"
+    ][0]["errors"]
+    with get_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM orders"
+        ).fetchone()[0] == 0
+
+
 def test_csv_and_excel_sample_files_have_expected_valid_and_invalid_rows():
     project_root = Path(__file__).resolve().parents[1]
     csv_path = project_root / "data" / "sample_orders.csv"
@@ -116,12 +170,15 @@ def test_csv_and_excel_sample_files_have_expected_valid_and_invalid_rows():
         df = pd.read_csv(path) if path.suffix == ".csv" else pd.read_excel(path)
         records, errors = validate_dataframe(df)
 
-        assert len(df) == 110
-        assert df["Order Date"].astype(str).str.fullmatch(
+        assert len(df) == 116
+        assert df.loc[
+            df["Order ID"] != "ORD-INVALID-BAD-ORDER-DATE",
+            "Order Date",
+        ].astype(str).str.fullmatch(
             r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
         ).all()
         assert len(records) == 100
-        assert len(errors) == 10
+        assert len(errors) == 16
         assert sum(
             "Duplicate order ID in uploaded file" in " ".join(error["errors"])
             for error in errors
@@ -130,7 +187,31 @@ def test_csv_and_excel_sample_files_have_expected_valid_and_invalid_rows():
             any(message.startswith("Missing mandatory field:")
                 for message in error["errors"])
             for error in errors
-        ) == 5
+        ) == 6
+        dispatched_without_eta = [
+            error for error in errors
+            if error["order_id"] == "ORD-INVALID-DISPATCH-NO-ETA"
+        ]
+        assert len(dispatched_without_eta) == 1
+        assert (
+            "Missing mandatory field: expected_delivery_date"
+            in dispatched_without_eta[0]["errors"]
+        )
+        assert any(
+            error["order_id"] == "ORD-INVALID-DISPATCH-BAD-ETA"
+            and "Invalid date: expected_delivery_date" in error["errors"]
+            for error in errors
+        )
+        for invalid_order_id in (
+            "ORD-INVALID-BAD-ORDER-DATE",
+            "ORD-INVALID-STATUS",
+            "ORD-INVALID-PAYMENT",
+            "ORD-INVALID-NEGATIVE-VALUE",
+        ):
+            assert any(
+                error["order_id"] == invalid_order_id
+                for error in errors
+            )
 
 
 def test_import_orders_persists_valid_sample_rows_and_reports_rejections():
@@ -141,7 +222,7 @@ def test_import_orders_persists_valid_sample_rows_and_reports_rejections():
     result = import_orders(upload)
 
     assert result["imported"] == 100
-    assert len(result["errors"]) == 10
+    assert len(result["errors"]) == 16
     with get_connection() as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM orders"
@@ -158,7 +239,7 @@ def test_excel_import_persists_valid_sample_rows():
     result = import_orders(upload)
 
     assert result["imported"] == 100
-    assert len(result["errors"]) == 10
+    assert len(result["errors"]) == 16
     with get_connection() as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM orders"

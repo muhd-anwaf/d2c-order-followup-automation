@@ -145,6 +145,13 @@ def validate_dataframe(df):
             if pd.isna(value) or str(value).strip() == "":
                 record[field] = None
                 if (
+                    field == "expected_delivery_date"
+                    and normalized_status == "dispatched"
+                ):
+                    row_errors.append(
+                        "Missing mandatory field: expected_delivery_date"
+                    )
+                if (
                     field == "order_date"
                     and normalized_status in UNCONFIRMED_STATUSES | {"placed"}
                 ):

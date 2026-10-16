@@ -182,7 +182,7 @@ for example, `Order Value (INR)` and `Order Value` both map to `order_value`.
 | `payment_type` | Yes | `Prepaid` or `COD` |
 | `order_status` | Yes | One of `processing`, `placed`, `cancelled`, `dispatched`, `delivered`, or `failed_delivery` |
 | `dispatch_date` | No | `2026-10-16 12:00:00` |
-| `expected_delivery_date` | No | `2026-10-19` |
+| `expected_delivery_date` | Required for `dispatched` orders; otherwise optional | `2026-10-19` |
 | `assigned_employee` | No | `Anu` |
 
 Use an unambiguous ISO-style date or timestamp, such as `YYYY-MM-DD` or
@@ -209,10 +209,12 @@ surrounding whitespace do not affect matching. Values outside the six statuses
 listed above are rejected. For `processing` and `placed` orders, a missing or
 invalid `order_date` is stored as missing and shown in the import error table
 so the rule engine can create a Data Correction exception and follow-up task.
-Other malformed nonblank dates and records with other missing mandatory
-fields are rejected from import. Blank optional dates are accepted; if a rule
-needs one of them, the rule engine creates a Data Correction exception rather
-than evaluating that business rule with incomplete data.
+Dispatched orders must include a valid expected delivery date; otherwise the
+row is rejected and reported as an import validation error. Other malformed
+nonblank dates and records with other missing mandatory fields are rejected
+from import. Blank optional dates are accepted; if a rule needs one of them,
+the rule engine creates a Data Correction exception rather than evaluating
+that business rule with incomplete data.
 
 ## Exception rules
 
@@ -336,11 +338,14 @@ exceptions; normal exception detection uses the saved value for new exceptions.
 
 ## Sample data
 
-`data/sample_orders.csv` and `data/sample_orders.xlsx` each contain 110 rows:
+`data/sample_orders.csv` and `data/sample_orders.xlsx` each contain 116 rows:
 
 - 100 valid, unique orders.
 - 5 duplicate-ID rows to exercise duplicate validation.
-- 5 incomplete rows to exercise mandatory-field validation.
+- 11 invalid rows to exercise validation errors: missing required values,
+  missing/invalid expected-delivery dates for dispatched orders, an invalid
+  order date, unsupported status and payment values, and a negative order
+  value.
 - Valid scenarios including delivered and `placed` orders, 15 `processing`
   orders, dispatch delays, overdue dispatched orders, failed delivery
   attempts, high-value orders, and missing expected-delivery dates.
@@ -386,7 +391,8 @@ cover:
 1. Optionally run `python data/generate_sample_orders.py` to refresh relative
    timestamps.
 2. Start the app and upload `data/sample_orders.csv`. Show 100 imported rows
-   and the 10 validation errors (five duplicate IDs and five incomplete rows).
+   and the 16 validation errors, including the dispatched order missing its
+   expected delivery date.
 3. Run exception detection with the default 24-hour dispatch threshold. Show
    the `Processing` exceptions and generated tasks.
 4. Set the dispatch threshold to 12 hours and run detection again. Show new

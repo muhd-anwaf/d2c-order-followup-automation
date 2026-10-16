@@ -138,12 +138,12 @@ def main():
         )
     for index in range(1, 6):
         add_order(
-            f"ORD-DATA-{index:03}",
-            "data_correction",
+            f"ORD-SHIP-EXTRA-{index:03}",
+            "overdue_shipment",
             "dispatched",
             order_offset=-2,
             dispatch_offset=-1,
-            delivery_offset=None,
+            delivery_offset=-1,
             assigned="Ravi Kumar",
         )
 
@@ -164,13 +164,65 @@ def main():
         incomplete[missing_field] = None
         rows.append(incomplete)
 
+    validation_cases = [
+        (
+            "ORD-INVALID-DISPATCH-NO-ETA",
+            "Order Status",
+            "dispatched",
+            "Expected Delivery Date",
+            None,
+        ),
+        (
+            "ORD-INVALID-DISPATCH-BAD-ETA",
+            "Order Status",
+            "dispatched",
+            "Expected Delivery Date",
+            "not-a-date",
+        ),
+        (
+            "ORD-INVALID-BAD-ORDER-DATE",
+            "Order Date",
+            "not-a-date",
+            None,
+            None,
+        ),
+        (
+            "ORD-INVALID-STATUS",
+            "Order Status",
+            "in transit",
+            None,
+            None,
+        ),
+        (
+            "ORD-INVALID-PAYMENT",
+            "Payment Type",
+            "wallet",
+            None,
+            None,
+        ),
+        (
+            "ORD-INVALID-NEGATIVE-VALUE",
+            "Order Value (INR)",
+            -250,
+            None,
+            None,
+        ),
+    ]
+    for order_id, field, value, extra_field, extra_value in validation_cases:
+        invalid = dict(rows[0])
+        invalid["Order ID"] = order_id
+        invalid[field] = value
+        if extra_field is not None:
+            invalid[extra_field] = extra_value
+        rows.append(invalid)
+
     output_dir = Path(__file__).resolve().parent
     frame = pd.DataFrame(rows)
     frame.to_csv(output_dir / "sample_orders.csv", index=False)
     frame.to_excel(output_dir / "sample_orders.xlsx", index=False)
     print(
         "Generated sample_orders.csv and sample_orders.xlsx: "
-        "100 valid unique orders, 5 duplicate rows, 5 incomplete rows."
+        "100 valid unique orders, 5 duplicate rows, and 11 invalid rows."
     )
 
 
