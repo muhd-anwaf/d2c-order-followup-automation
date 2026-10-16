@@ -6,15 +6,20 @@ import sqlite3
 import pandas as pd
 import streamlit as st
 
-from config import DISPATCH_LIMIT_HOURS
+from config import DISPATCH_LIMIT_HOURS, HIGH_VALUE_THRESHOLD
 from src.database import (
     clear_database,
+    get_high_value_threshold,
     get_connection,
     initialize_database,
+    save_high_value_threshold,
 )
 from src.importer import import_orders
 from src.report_service import build_daily_exception_report
-from src.rule_engine import run_rule_engine
+from src.rule_engine import (
+    recalculate_high_value_priorities,
+    run_rule_engine,
+)
 from src.task_service import create_tasks_for_exceptions, update_task
 
 
@@ -106,6 +111,47 @@ performed_by = st.sidebar.text_input(
     "Manager / audit actor",
     value="Manager",
 )
+
+st.sidebar.header("Business Rule Settings")
+saved_high_value_threshold = get_high_value_threshold()
+high_value_threshold_input = st.sidebar.number_input(
+    "High-Value Order Threshold (₹)",
+    min_value=0.01,
+    value=saved_high_value_threshold or float(HIGH_VALUE_THRESHOLD),
+    step=100.0,
+    format="%.2f",
+)
+if st.sidebar.button("Save Settings"):
+    try:
+        saved_high_value_threshold = save_high_value_threshold(
+            high_value_threshold_input
+        )
+        st.sidebar.success(
+            f"Saved high-value threshold: "
+            f"₹{saved_high_value_threshold:,.2f}."
+        )
+    except (sqlite3.Error, ValueError) as exc:
+        st.sidebar.error(f"Could not save settings: {exc}")
+
+st.sidebar.caption(
+    f"Currently saved threshold: ₹{saved_high_value_threshold:,.2f}"
+)
+st.sidebar.caption(
+    "Saving only changes the persisted setting. Recalculate to update "
+    "priorities on existing exceptions."
+)
+if st.sidebar.button("Recalculate Threshold"):
+    try:
+        updated_priorities = recalculate_high_value_priorities(
+            performed_by=performed_by
+        )
+        st.sidebar.success(
+            f"Recalculated priorities for {updated_priorities} exceptions "
+            f"using the saved threshold of "
+            f"₹{get_high_value_threshold():,.2f}."
+        )
+    except (sqlite3.Error, ValueError) as exc:
+        st.sidebar.error(f"Could not recalculate priorities: {exc}")
 
 if st.sidebar.button("Run Exception Detection"):
     try:

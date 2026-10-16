@@ -1,7 +1,10 @@
 
 from contextlib import contextmanager
+import math
 import sqlite3
 from pathlib import Path
+
+from config import HIGH_VALUE_THRESHOLD
 
 DB_PATH = Path(__file__).resolve().parent.parent / "order_followup.db"
 
@@ -89,7 +92,47 @@ def initialize_database():
 
             CREATE INDEX IF NOT EXISTS idx_exceptions_type
                 ON exceptions(exception_type);
+
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value REAL NOT NULL CHECK (value > 0)
+            );
         """)
+        connection.execute(
+            "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)",
+            ("high_value_threshold", HIGH_VALUE_THRESHOLD),
+        )
+
+
+def get_high_value_threshold():
+    """Return the persisted high-value threshold, falling back to config."""
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT value FROM app_settings WHERE key = ?",
+            ("high_value_threshold",),
+        ).fetchone()
+
+    return float(row["value"]) if row else float(HIGH_VALUE_THRESHOLD)
+
+
+def save_high_value_threshold(threshold):
+    """Persist a positive, finite high-value threshold."""
+    try:
+        normalized_threshold = float(threshold)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Threshold must be a positive amount") from exc
+
+    if not math.isfinite(normalized_threshold) or normalized_threshold <= 0:
+        raise ValueError("Threshold must be a positive amount")
+
+    with get_connection() as connection:
+        connection.execute("""
+            INSERT INTO app_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """, ("high_value_threshold", normalized_threshold))
+
+    return normalized_threshold
 
 
 def clear_database():

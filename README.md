@@ -227,8 +227,14 @@ priority, recommended action, and a stable key used to avoid duplicates.
 | **Failed Delivery** | Status is `failed_delivery`. | High |
 | **Data Correction** | A date required to evaluate a relevant rule is missing or invalid, or an unsupported status is encountered in stored data. | Medium |
 
-Any applicable exception for an order worth more than ₹5,000 is raised to
-High priority. High value does not create a separate exception.
+Any applicable exception for an order valued strictly above the currently
+saved high-value threshold is raised to High priority. The default threshold
+is ₹5,000; high value does not create a separate exception. Changing the
+threshold does not change existing exceptions until **Recalculate Threshold**
+is selected in the sidebar. Recalculation updates exception priority in place,
+reverts priorities that no longer qualify to their configured default, and
+records each change in the audit trail. It does not change task status, so
+Open, In Progress, and Resolved tasks remain in their current lifecycle state.
 
 Elapsed-time rules use a strict greater-than comparison. For `processing`,
 1 hour 59 minutes and exactly 2 hours do not trigger an exception; 2 hours and
@@ -317,13 +323,16 @@ Thresholds and default priorities are defined in `config.py`.
 | `ORDER_STATUSES` | Six fixed statuses | Accepted order status values; inputs are normalized to lowercase. |
 | `UNCONFIRMED_STATUSES` | `processing` | Statuses evaluated by the unconfirmed rule. |
 | `DISPATCH_LIMIT_HOURS` | 24 | Default `placed`-order dispatch limit. |
-| `HIGH_VALUE_THRESHOLD` | 5000 | Order value in INR above which applicable exceptions are High priority. |
+| `HIGH_VALUE_THRESHOLD` | 5000 | Default order value in INR above which applicable exceptions are High priority; the saved dashboard setting overrides it. |
 | `DEFAULT_PRIORITY` | Per exception type | Priority assigned to each exception type. |
 
 The dashboard's **Dispatch delay threshold (hours)** control overrides the
 configured default for the current rule-engine run. Set it to `12` to
 demonstrate a 12-hour dispatch limit without editing code. The two-hour
-unconfirmed limit is configured in `config.py`.
+unconfirmed limit is configured in `config.py`. The sidebar's **Business Rule
+Settings** section saves the high-value threshold in the SQLite settings table.
+Use **Recalculate Threshold** after saving to update priorities on existing
+exceptions; normal exception detection uses the saved value for new exceptions.
 
 ## Sample data
 

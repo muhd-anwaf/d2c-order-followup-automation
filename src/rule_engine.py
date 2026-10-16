@@ -2,11 +2,10 @@
 
 from datetime import datetime, timedelta, timezone
 
-from src.database import get_connection
+from src.database import get_connection, get_high_value_threshold
 from config import (
     UNCONFIRMED_LIMIT_HOURS,
     DISPATCH_LIMIT_HOURS,
-    HIGH_VALUE_THRESHOLD,
     DEFAULT_PRIORITY,
     UNCONFIRMED_STATUSES,
     ORDER_STATUSES,
@@ -53,10 +52,15 @@ def evaluate_order(
     order,
     now=None,
     dispatch_limit_hours=DISPATCH_LIMIT_HOURS,
+    high_value_threshold=None,
 ):
     """Return all applicable exceptions for one order."""
     if dispatch_limit_hours <= 0:
         raise ValueError("dispatch_limit_hours must be greater than zero")
+    if high_value_threshold is None:
+        high_value_threshold = get_high_value_threshold()
+    if high_value_threshold <= 0:
+        raise ValueError("high_value_threshold must be greater than zero")
 
     now = parse_date(now or datetime.now(timezone.utc))
     if now is None:
@@ -98,7 +102,7 @@ def evaluate_order(
                 "priority": (
                     "High"
                     if order_value is not None
-                    and order_value > HIGH_VALUE_THRESHOLD
+                    and order_value > high_value_threshold
                     else DEFAULT_PRIORITY[exception_type]
                 ),
                 "recommended_action": action,
@@ -178,6 +182,7 @@ def evaluate_order(
 
 def run_rule_engine(now=None, dispatch_limit_hours=DISPATCH_LIMIT_HOURS):
     """Evaluate stored orders and persist new exceptions."""
+    high_value_threshold = get_high_value_threshold()
     with get_connection() as connection:
         orders = connection.execute(
             "SELECT * FROM orders"
@@ -190,6 +195,7 @@ def run_rule_engine(now=None, dispatch_limit_hours=DISPATCH_LIMIT_HOURS):
                 dict(order),
                 now,
                 dispatch_limit_hours=dispatch_limit_hours,
+                high_value_threshold=high_value_threshold,
             ):
                 cursor = connection.execute("""
                     INSERT OR IGNORE INTO exceptions (
@@ -212,3 +218,54 @@ def run_rule_engine(now=None, dispatch_limit_hours=DISPATCH_LIMIT_HOURS):
                 created += cursor.rowcount
 
     return created
+
+
+def recalculate_high_value_priorities(performed_by="Manager"):
+    """Recalculate exception priorities using the saved high-value threshold."""
+    if not performed_by or not performed_by.strip():
+        raise ValueError("performed_by is required")
+
+    threshold = get_high_value_threshold()
+    updated = 0
+    with get_connection() as connection:
+        exceptions = connection.execute("""
+            SELECT e.id, e.order_id, e.exception_type, e.priority,
+                   o.order_value, t.id AS task_id
+            FROM exceptions e
+            JOIN orders o ON o.order_id = e.order_id
+            LEFT JOIN tasks t ON t.exception_id = e.id
+        """).fetchall()
+
+        for exception in exceptions:
+            try:
+                order_value = float(exception["order_value"])
+            except (TypeError, ValueError):
+                order_value = None
+
+            priority = (
+                "High"
+                if order_value is not None and order_value > threshold
+                else DEFAULT_PRIORITY[exception["exception_type"]]
+            )
+            if priority == exception["priority"]:
+                continue
+
+            connection.execute(
+                "UPDATE exceptions SET priority = ? WHERE id = ?",
+                (priority, exception["id"]),
+            )
+            connection.execute("""
+                INSERT INTO audit_logs (
+                    order_id, task_id, action, old_value, new_value,
+                    performed_by
+                ) VALUES (?, ?, 'Exception Priority Changed', ?, ?, ?)
+            """, (
+                exception["order_id"],
+                exception["task_id"],
+                exception["priority"],
+                priority,
+                performed_by.strip(),
+            ))
+            updated += 1
+
+    return updated
