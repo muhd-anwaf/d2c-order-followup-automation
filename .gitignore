@@ -1,0 +1,19 @@
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Secrets and environment files
+.env
+.env.*
+
+# Local database and runtime files
+*.db
+*.sqlite
+*.sqlite3
+
+# Editor
+.vscode/
