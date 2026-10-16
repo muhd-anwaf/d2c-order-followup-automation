@@ -3,12 +3,37 @@ import zipfile
 
 import pandas as pd
 
+from config import MAX_UPLOAD_SIZE_MB
 from src.database import get_connection
 from src.validator import validate_dataframe
 
 
+def _uploaded_file_size(uploaded_file):
+    size = getattr(uploaded_file, "size", None)
+    if size is not None:
+        return int(size)
+
+    current_position = uploaded_file.tell()
+    uploaded_file.seek(0, 2)
+    size = uploaded_file.tell()
+    uploaded_file.seek(current_position)
+    return size
+
+
 def import_orders(uploaded_file):
     filename = uploaded_file.name.lower()
+
+    if _uploaded_file_size(uploaded_file) > MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+        return {
+            "imported": 0,
+            "errors": [{
+                "row": None,
+                "order_id": None,
+                "errors": [
+                    f"File exceeds the {MAX_UPLOAD_SIZE_MB} MB upload limit"
+                ],
+            }],
+        }
 
     if not filename.endswith((".csv", ".xlsx", ".xls")):
         return {

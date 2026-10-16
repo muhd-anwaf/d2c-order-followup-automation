@@ -26,6 +26,7 @@ task changes in SQLite.
 ## Features
 
 - Import CSV, `.xlsx`, and `.xls` order files.
+- Restrict uploaded files to a maximum of 10 MB.
 - Normalize common column-name variants, including `Order Value (INR)`.
 - Validate required values, IDs, dates, payment types, and order amounts.
 - Detect five exception types: Unconfirmed Order, Dispatch Delay, Shipment
@@ -158,6 +159,7 @@ Stop the server with `Ctrl+C`.
 
 1. Start the app using the commands above.
 2. In the sidebar, select a CSV or Excel file under **Upload CSV or Excel**.
+   Files larger than 10 MB are rejected.
 3. Click **Import Orders**. The app reports how many records it imported and
    displays row-level validation errors when present.
 4. Set the **Dispatch delay threshold (hours)** if needed. It defaults to 24.
@@ -216,6 +218,7 @@ Validation checks:
 - Invalid order, dispatch, or expected-delivery dates.
 - Negative/non-finite or non-numeric order values.
 - Payment values other than `prepaid` or `cod`.
+- Upload files larger than 10 MB.
 
 Duplicate IDs inside one upload are compared without regard to capitalization.
 An order ID already stored in the database is rejected rather than updated;

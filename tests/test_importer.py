@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from config import MAX_UPLOAD_SIZE_MB
 from src.database import get_connection
 from src.importer import import_orders
 from src.validator import validate_dataframe
@@ -34,6 +35,48 @@ def test_valid_order():
 
     assert len(records) == 1
     assert errors == []
+
+
+def test_import_rejects_files_larger_than_10_mb_without_importing():
+    upload = NamedBytesIO(
+        b"Order ID\n" + b"x" * (MAX_UPLOAD_SIZE_MB * 1024 * 1024),
+        "oversized.csv",
+    )
+
+    result = import_orders(upload)
+
+    assert result["imported"] == 0
+    assert result["errors"] == [{
+        "row": None,
+        "order_id": None,
+        "errors": ["File exceeds the 10 MB upload limit"],
+    }]
+    with get_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM orders"
+        ).fetchone()[0] == 0
+
+
+def test_import_accepts_file_exactly_at_size_limit():
+    csv_content = (
+        b"Order ID,Order Date,Customer Name,Phone Number,Order Value,"
+        b"Payment Type,Order Status,Dispatch Date,"
+        b"Expected Delivery Date,Assigned Employee\n"
+        b"ORD-EXACT-LIMIT,2026-10-16 08:00:00,Customer,9876543210,1000,"
+        b"COD,placed,,,Employee A\n"
+    )
+    csv_content += b"\n" * (
+        MAX_UPLOAD_SIZE_MB * 1024 * 1024 - len(csv_content)
+    )
+    upload = NamedBytesIO(csv_content, "exact-limit.csv")
+
+    result = import_orders(upload)
+
+    assert result["imported"] == 1
+    assert not any(
+        "upload limit" in " ".join(error["errors"])
+        for error in result["errors"]
+    )
 
 
 def test_duplicate_ids():

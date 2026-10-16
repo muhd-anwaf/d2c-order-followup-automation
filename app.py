@@ -6,7 +6,11 @@ import sqlite3
 import pandas as pd
 import streamlit as st
 
-from config import DISPATCH_LIMIT_HOURS, HIGH_VALUE_THRESHOLD
+from config import (
+    DISPATCH_LIMIT_HOURS,
+    HIGH_VALUE_THRESHOLD,
+    MAX_UPLOAD_SIZE_MB,
+)
 from src.database import (
     clear_database,
     get_high_value_threshold,
@@ -78,7 +82,9 @@ st.sidebar.header("Order Import")
 uploaded_file = st.sidebar.file_uploader(
     "Upload CSV or Excel",
     type=["csv", "xlsx", "xls"],
+    max_upload_size=MAX_UPLOAD_SIZE_MB,
 )
+st.sidebar.caption(f"Maximum file size: {MAX_UPLOAD_SIZE_MB} MB.")
 
 if st.sidebar.button("Import Orders", type="primary"):
     if uploaded_file is None:
