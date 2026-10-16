@@ -45,7 +45,7 @@ def main():
         elif category == "dispatch_delay":
             order_date = f"{order_day.isoformat()} 08:00:00"
         else:
-            order_date = order_day.isoformat()
+            order_date = f"{order_day.isoformat()} 08:00:00"
 
         rows.append({
             "Order ID": order_id,

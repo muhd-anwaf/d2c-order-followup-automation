@@ -117,6 +117,9 @@ def test_csv_and_excel_sample_files_have_expected_valid_and_invalid_rows():
         records, errors = validate_dataframe(df)
 
         assert len(df) == 110
+        assert df["Order Date"].astype(str).str.fullmatch(
+            r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
+        ).all()
         assert len(records) == 100
         assert len(errors) == 10
         assert sum(
